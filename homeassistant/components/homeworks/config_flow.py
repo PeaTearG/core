@@ -8,6 +8,7 @@ from typing import Any
 from pyhomeworks.pyhomeworks import Homeworks
 import voluptuous as vol
 
+from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
 from homeassistant.components.button import DOMAIN as BUTTON_DOMAIN
 from homeassistant.components.light import DOMAIN as LIGHT_DOMAIN
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult
@@ -43,6 +44,7 @@ from .const import (
     CONF_DIMMERS,
     CONF_INDEX,
     CONF_KEYPADS,
+    CONF_LED,
     CONF_NUMBER,
     CONF_RATE,
     CONF_RELEASE_DELAY,
@@ -77,6 +79,7 @@ LIGHT_EDIT = {
 }
 
 BUTTON_EDIT = {
+    vol.Optional(CONF_LED, default=False): selector.BooleanSelector(),
     vol.Optional(CONF_RELEASE_DELAY, default=0): selector.NumberSelector(
         selector.NumberSelectorConfig(
             min=0,
@@ -379,16 +382,17 @@ async def validate_remove_button(
         if str(index) not in removed_indexes:
             items.append(item)
         button_number = keypad[CONF_BUTTONS][index][CONF_NUMBER]
-        if entity_id := entity_registry.async_get_entity_id(
-            BUTTON_DOMAIN,
-            DOMAIN,
-            calculate_unique_id(
-                handler.options[CONF_CONTROLLER_ID],
-                keypad[CONF_ADDR],
-                button_number,
-            ),
-        ):
-            entity_registry.async_remove(entity_id)
+        for domain in (BINARY_SENSOR_DOMAIN, BUTTON_DOMAIN):
+            if entity_id := entity_registry.async_get_entity_id(
+                domain,
+                DOMAIN,
+                calculate_unique_id(
+                    handler.options[CONF_CONTROLLER_ID],
+                    keypad[CONF_ADDR],
+                    button_number,
+                ),
+            ):
+                entity_registry.async_remove(entity_id)
     keypad[CONF_BUTTONS] = items
     return {}
 
@@ -561,6 +565,7 @@ class HomeworksConfigFlowHandler(ConfigFlow, domain=DOMAIN):
                     CONF_ADDR: keypad[CONF_ADDR],
                     CONF_BUTTONS: [
                         {
+                            CONF_LED: button[CONF_LED],
                             CONF_NAME: button[CONF_NAME],
                             CONF_NUMBER: button[CONF_NUMBER],
                             CONF_RELEASE_DELAY: button[CONF_RELEASE_DELAY],

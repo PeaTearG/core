@@ -4,6 +4,7 @@ from unittest.mock import ANY, MagicMock
 import pytest
 from pytest_unordered import unordered
 
+from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
 from homeassistant.components.button import DOMAIN as BUTTON_DOMAIN
 from homeassistant.components.homeworks.const import (
     CONF_ADDR,
@@ -11,6 +12,7 @@ from homeassistant.components.homeworks.const import (
     CONF_DIMMERS,
     CONF_INDEX,
     CONF_KEYPADS,
+    CONF_LED,
     CONF_NUMBER,
     CONF_RATE,
     CONF_RELEASE_DELAY,
@@ -162,16 +164,19 @@ async def test_import_flow(
                         {
                             CONF_NAME: "Morning",
                             CONF_NUMBER: 1,
+                            CONF_LED: True,
                             CONF_RELEASE_DELAY: None,
                         },
                         {
                             CONF_NAME: "Relax",
                             CONF_NUMBER: 2,
+                            CONF_LED: True,
                             CONF_RELEASE_DELAY: None,
                         },
                         {
                             CONF_NAME: "Dim up",
                             CONF_NUMBER: 3,
+                            CONF_LED: False,
                             CONF_RELEASE_DELAY: 0.2,
                         },
                     ],
@@ -203,12 +208,13 @@ async def test_import_flow(
                 "addr": "[02:08:02:01]",
                 "buttons": [
                     {
+                        "led": True,
                         "name": "Morning",
                         "number": 1,
                         "release_delay": None,
                     },
-                    {"name": "Relax", "number": 2, "release_delay": None},
-                    {"name": "Dim up", "number": 3, "release_delay": 0.2},
+                    {"led": True, "name": "Relax", "number": 2, "release_delay": None},
+                    {"led": False, "name": "Dim up", "number": 3, "release_delay": 0.2},
                 ],
                 "name": "Foyer Keypad",
             }
@@ -352,12 +358,13 @@ async def test_options_add_remove_light_flow(
                 "addr": "[02:08:02:01]",
                 "buttons": [
                     {
+                        "led": True,
                         "name": "Morning",
                         "number": 1,
                         "release_delay": None,
                     },
-                    {"name": "Relax", "number": 2, "release_delay": None},
-                    {"name": "Dim up", "number": 3, "release_delay": 0.2},
+                    {"led": True, "name": "Relax", "number": 2, "release_delay": None},
+                    {"led": False, "name": "Dim up", "number": 3, "release_delay": 0.2},
                 ],
                 "name": "Foyer Keypad",
             }
@@ -403,12 +410,13 @@ async def test_options_add_remove_light_flow(
                 "addr": "[02:08:02:01]",
                 "buttons": [
                     {
+                        "led": True,
                         "name": "Morning",
                         "number": 1,
                         "release_delay": None,
                     },
-                    {"name": "Relax", "number": 2, "release_delay": None},
-                    {"name": "Dim up", "number": 3, "release_delay": 0.2},
+                    {"led": True, "name": "Relax", "number": 2, "release_delay": None},
+                    {"led": False, "name": "Dim up", "number": 3, "release_delay": 0.2},
                 ],
                 "name": "Foyer Keypad",
             }
@@ -462,12 +470,13 @@ async def test_options_add_remove_keypad_flow(
                 "addr": "[02:08:02:01]",
                 "buttons": [
                     {
+                        "led": True,
                         "name": "Morning",
                         "number": 1,
                         "release_delay": None,
                     },
-                    {"name": "Relax", "number": 2, "release_delay": None},
-                    {"name": "Dim up", "number": 3, "release_delay": 0.2},
+                    {"led": True, "name": "Relax", "number": 2, "release_delay": None},
+                    {"led": False, "name": "Dim up", "number": 3, "release_delay": 0.2},
                 ],
                 "name": "Foyer Keypad",
             },
@@ -610,12 +619,13 @@ async def test_options_edit_light_no_lights_flow(
                 "addr": "[02:08:02:01]",
                 "buttons": [
                     {
+                        "led": True,
                         "name": "Morning",
                         "number": 1,
                         "release_delay": None,
                     },
-                    {"name": "Relax", "number": 2, "release_delay": None},
-                    {"name": "Dim up", "number": 3, "release_delay": 0.2},
+                    {"led": True, "name": "Relax", "number": 2, "release_delay": None},
+                    {"led": False, "name": "Dim up", "number": 3, "release_delay": 0.2},
                 ],
                 "name": "Foyer Keypad",
             }
@@ -661,6 +671,7 @@ async def test_options_add_button_flow(
     mock_config_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
+    assert len(hass.states.async_entity_ids(BINARY_SENSOR_DOMAIN)) == 2
     assert len(hass.states.async_entity_ids(BUTTON_DOMAIN)) == 3
 
     result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
@@ -696,6 +707,7 @@ async def test_options_add_button_flow(
             CONF_NAME: "Dim down",
             CONF_NUMBER: 4,
             CONF_RELEASE_DELAY: 0.2,
+            CONF_LED: True,
         },
     )
     await hass.async_block_till_done()
@@ -710,13 +722,15 @@ async def test_options_add_button_flow(
                 "addr": "[02:08:02:01]",
                 "buttons": [
                     {
+                        "led": True,
                         "name": "Morning",
                         "number": 1,
                         "release_delay": None,
                     },
-                    {"name": "Relax", "number": 2, "release_delay": None},
-                    {"name": "Dim up", "number": 3, "release_delay": 0.2},
+                    {"led": True, "name": "Relax", "number": 2, "release_delay": None},
+                    {"led": False, "name": "Dim up", "number": 3, "release_delay": 0.2},
                     {
+                        "led": True,
                         "name": "Dim down",
                         "number": 4,
                         "release_delay": 0.2,
@@ -731,6 +745,7 @@ async def test_options_add_button_flow(
     await hass.async_block_till_done()
 
     # Check the new entities were added
+    assert len(hass.states.async_entity_ids(BINARY_SENSOR_DOMAIN)) == 3
     assert len(hass.states.async_entity_ids(BUTTON_DOMAIN)) == 4
 
 
@@ -790,6 +805,7 @@ async def test_options_edit_button_flow(
     mock_config_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
+    assert len(hass.states.async_entity_ids(BINARY_SENSOR_DOMAIN)) == 2
     assert len(hass.states.async_entity_ids(BUTTON_DOMAIN)) == 3
 
     result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
@@ -834,6 +850,7 @@ async def test_options_edit_button_flow(
         result["flow_id"],
         user_input={
             CONF_RELEASE_DELAY: 0,
+            CONF_LED: False,
         },
     )
     await hass.async_block_till_done()
@@ -848,12 +865,13 @@ async def test_options_edit_button_flow(
                 "addr": "[02:08:02:01]",
                 "buttons": [
                     {
+                        "led": False,
                         "name": "Morning",
                         "number": 1,
                         "release_delay": 0.0,
                     },
-                    {"name": "Relax", "number": 2, "release_delay": None},
-                    {"name": "Dim up", "number": 3, "release_delay": 0.2},
+                    {"led": True, "name": "Relax", "number": 2, "release_delay": None},
+                    {"led": False, "name": "Dim up", "number": 3, "release_delay": 0.2},
                 ],
                 "name": "Foyer Keypad",
             }
@@ -864,6 +882,7 @@ async def test_options_edit_button_flow(
     await hass.async_block_till_done()
 
     # Check the new entities were added
+    assert len(hass.states.async_entity_ids(BINARY_SENSOR_DOMAIN)) == 2
     assert len(hass.states.async_entity_ids(BUTTON_DOMAIN)) == 3
 
 
@@ -874,6 +893,7 @@ async def test_options_remove_button_flow(
     mock_config_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
+    assert len(hass.states.async_entity_ids(BINARY_SENSOR_DOMAIN)) == 2
     assert len(hass.states.async_entity_ids(BUTTON_DOMAIN)) == 3
 
     result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
@@ -921,8 +941,8 @@ async def test_options_remove_button_flow(
             {
                 "addr": "[02:08:02:01]",
                 "buttons": [
-                    {"name": "Relax", "number": 2, "release_delay": None},
-                    {"name": "Dim up", "number": 3, "release_delay": 0.2},
+                    {"led": True, "name": "Relax", "number": 2, "release_delay": None},
+                    {"led": False, "name": "Dim up", "number": 3, "release_delay": 0.2},
                 ],
                 "name": "Foyer Keypad",
             }
@@ -933,4 +953,5 @@ async def test_options_remove_button_flow(
     await hass.async_block_till_done()
 
     # Check the entities were removed
+    assert len(hass.states.async_entity_ids(BINARY_SENSOR_DOMAIN)) == 1
     assert len(hass.states.async_entity_ids(BUTTON_DOMAIN)) == 2
