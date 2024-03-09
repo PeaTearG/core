@@ -1,6 +1,8 @@
 """The tests for the MQTT component."""
+
 import asyncio
 from collections.abc import Generator
+from copy import deepcopy
 from datetime import datetime, timedelta
 from functools import partial
 import json
@@ -19,6 +21,7 @@ from homeassistant.components.mqtt.mixins import MQTT_ENTITY_DEVICE_INFO_SCHEMA
 from homeassistant.components.mqtt.models import (
     MessageCallbackType,
     MqttCommandTemplateException,
+    MqttValueTemplateException,
     ReceiveMessage,
 )
 from homeassistant.config_entries import ConfigEntryDisabler, ConfigEntryState
@@ -433,37 +436,30 @@ async def test_value_template_value(hass: HomeAssistant) -> None:
         assert template_state_calls.call_count == 1
 
 
-async def test_value_template_fails(
-    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
-) -> None:
+async def test_value_template_fails(hass: HomeAssistant) -> None:
     """Test the rendering of MQTT value template fails."""
-
-    # test rendering a value fails
     entity = MockEntity(entity_id="sensor.test")
     entity.hass = hass
     tpl = template.Template("{{ value_json.some_var * 2 }}")
     val_tpl = mqtt.MqttValueTemplate(tpl, hass=hass, entity=entity)
-    with pytest.raises(TypeError) as exc:
+    with pytest.raises(MqttValueTemplateException) as exc:
         val_tpl.async_render_with_possible_json_value('{"some_var": null }')
-    assert str(exc.value) == "unsupported operand type(s) for *: 'NoneType' and 'int'"
-    assert (
+    assert str(exc.value) == (
         "TypeError: unsupported operand type(s) for *: 'NoneType' and 'int' "
         "rendering template for entity 'sensor.test', "
-        "template: '{{ value_json.some_var * 2 }}'"
-    ) in caplog.text
-    caplog.clear()
-    with pytest.raises(TypeError) as exc:
+        "template: '{{ value_json.some_var * 2 }}' "
+        'and payload: {"some_var": null }'
+    )
+    with pytest.raises(MqttValueTemplateException) as exc:
         val_tpl.async_render_with_possible_json_value(
             '{"some_var": null }', default=100
         )
-    assert str(exc.value) == "unsupported operand type(s) for *: 'NoneType' and 'int'"
-    assert (
+    assert str(exc.value) == (
         "TypeError: unsupported operand type(s) for *: 'NoneType' and 'int' "
         "rendering template for entity 'sensor.test', "
         "template: '{{ value_json.some_var * 2 }}', default value: 100 and payload: "
         '{"some_var": null }'
-    ) in caplog.text
-    await hass.async_block_till_done()
+    )
 
 
 async def test_service_call_without_topic_does_not_publish(
@@ -753,11 +749,11 @@ def test_validate_topic() -> None:
     with pytest.raises(vol.Invalid):
         mqtt.util.valid_topic("\u0001")
     with pytest.raises(vol.Invalid):
-        mqtt.util.valid_topic("\u001F")
+        mqtt.util.valid_topic("\u001f")
     with pytest.raises(vol.Invalid):
-        mqtt.util.valid_topic("\u007F")
+        mqtt.util.valid_topic("\u007f")
     with pytest.raises(vol.Invalid):
-        mqtt.util.valid_topic("\u009F")
+        mqtt.util.valid_topic("\u009f")
     with pytest.raises(vol.Invalid):
         mqtt.util.valid_topic("\ufdd0")
     with pytest.raises(vol.Invalid):
@@ -2728,7 +2724,7 @@ async def test_mqtt_ws_subscription(
 
     async_fire_mqtt_message(hass, "test-topic", "test1")
     async_fire_mqtt_message(hass, "test-topic", "test2")
-    async_fire_mqtt_message(hass, "test-topic", b"\xDE\xAD\xBE\xEF")
+    async_fire_mqtt_message(hass, "test-topic", b"\xde\xad\xbe\xef")
 
     response = await client.receive_json()
     assert response["event"]["topic"] == "test-topic"
@@ -2756,7 +2752,7 @@ async def test_mqtt_ws_subscription(
 
     async_fire_mqtt_message(hass, "test-topic", "test1", 2)
     async_fire_mqtt_message(hass, "test-topic", "test2", 2)
-    async_fire_mqtt_message(hass, "test-topic", b"\xDE\xAD\xBE\xEF", 2)
+    async_fire_mqtt_message(hass, "test-topic", b"\xde\xad\xbe\xef", 2)
 
     response = await client.receive_json()
     assert response["event"]["topic"] == "test-topic"
@@ -3551,7 +3547,6 @@ async def test_subscribe_connection_status(
     assert mqtt_connected_calls_async[1] is False
 
 
-@patch("homeassistant.components.mqtt.PLATFORMS", [Platform.LIGHT])
 async def test_unload_config_entry(
     hass: HomeAssistant,
     mqtt_mock: MqttMockHAClient,
@@ -3568,6 +3563,7 @@ async def test_unload_config_entry(
     # Publish just before unloading to test await cleanup
     mqtt_client_mock.reset_mock()
     mqtt.publish(hass, "just_in_time", "published", qos=0, retain=False)
+    await hass.async_block_till_done()
 
     assert await hass.config_entries.async_unload(mqtt_config_entry.entry_id)
     new_mqtt_config_entry = mqtt_config_entry
@@ -4051,3 +4047,127 @@ async def test_reload_with_empty_config(
         await hass.async_block_till_done()
 
     assert hass.states.get("sensor.test") is None
+
+
+@pytest.mark.parametrize(
+    "hass_config",
+    [
+        {
+            "mqtt": [
+                {
+                    "sensor": {
+                        "name": "test",
+                        "state_topic": "test-topic",
+                    }
+                },
+            ]
+        }
+    ],
+)
+async def test_reload_with_new_platform_config(
+    hass: HomeAssistant,
+    mqtt_mock_entry: MqttMockHAClientGenerator,
+) -> None:
+    """Test reloading yaml with new platform config."""
+    await mqtt_mock_entry()
+    assert hass.states.get("sensor.test") is not None
+    assert hass.states.get("binary_sensor.test") is None
+
+    new_config = {
+        "mqtt": [
+            {
+                "sensor": {
+                    "name": "test",
+                    "state_topic": "test-topic1",
+                },
+                "binary_sensor": {
+                    "name": "test",
+                    "state_topic": "test-topic2",
+                },
+            },
+        ]
+    }
+
+    # Reload with an new platform config and assert again
+    with patch("homeassistant.config.load_yaml_config_file", return_value=new_config):
+        await hass.services.async_call(
+            "mqtt",
+            SERVICE_RELOAD,
+            {},
+            blocking=True,
+        )
+        await hass.async_block_till_done()
+
+    assert hass.states.get("sensor.test") is not None
+    assert hass.states.get("binary_sensor.test") is not None
+
+
+async def test_multi_platform_discovery(
+    hass: HomeAssistant,
+    device_registry: dr.DeviceRegistry,
+    mqtt_mock_entry: MqttMockHAClientGenerator,
+) -> None:
+    """Test setting up multiple platforms simultaneous."""
+    await mqtt_mock_entry()
+    entity_configs = {
+        "alarm_control_panel": {
+            "name": "test",
+            "state_topic": "alarm/state",
+            "command_topic": "alarm/command",
+        },
+        "button": {"name": "test", "command_topic": "test-topic"},
+        "camera": {"name": "test", "topic": "test_topic"},
+        "cover": {"name": "test", "state_topic": "test-topic"},
+        "device_tracker": {
+            "name": "test",
+            "state_topic": "test-topic",
+        },
+        "fan": {
+            "name": "test",
+            "state_topic": "state-topic",
+            "command_topic": "command-topic",
+        },
+        "sensor": {"name": "test", "state_topic": "test-topic"},
+        "switch": {"name": "test", "command_topic": "test-topic"},
+        "select": {
+            "name": "test",
+            "command_topic": "test-topic",
+            "options": ["milk", "beer"],
+        },
+    }
+    non_entity_configs = {
+        "tag": {
+            "device": {"identifiers": ["tag_0AFFD2"]},
+            "topic": "foobar/tag_scanned",
+        },
+        "device_automation": {
+            "automation_type": "trigger",
+            "device": {"identifiers": ["device_automation_0AFFD2"]},
+            "payload": "short_press",
+            "topic": "foobar/triggers/button1",
+            "type": "button_short_press",
+            "subtype": "button_1",
+        },
+    }
+    for platform, config in entity_configs.items():
+        for set_number in range(0, 2):
+            set_config = deepcopy(config)
+            set_config["name"] = f"test_{set_number}"
+            topic = f"homeassistant/{platform}/bla_{set_number}/config"
+            async_fire_mqtt_message(hass, topic, json.dumps(set_config))
+    for platform, config in non_entity_configs.items():
+        topic = f"homeassistant/{platform}/bla/config"
+        async_fire_mqtt_message(hass, topic, json.dumps(config))
+    await hass.async_block_till_done()
+    for set_number in range(0, 2):
+        for platform in entity_configs:
+            entity_id = f"{platform}.test_{set_number}"
+            state = hass.states.get(entity_id)
+            assert state is not None
+    for platform in non_entity_configs:
+        assert (
+            device_registry.async_get_device(
+                identifiers={("mqtt", f"{platform}_0AFFD2")}
+            )
+            is not None
+        )

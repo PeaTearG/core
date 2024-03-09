@@ -1,4 +1,5 @@
 """The tests for notify services that change targets."""
+
 import asyncio
 from collections.abc import Mapping
 import copy
